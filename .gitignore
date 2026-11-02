@@ -1,0 +1,12 @@
+# downloaded play-by-play seasons (70-130 MB each); fetch with playByPlay.download_cfb_pbp
+data/
+
+# secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+.pytest_cache/
