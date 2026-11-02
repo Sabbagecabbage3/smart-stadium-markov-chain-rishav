@@ -49,6 +49,7 @@ Run the tests with `python -m pytest tests -q`. The notebook [notebooks/conflate
 | `notebooks/` | The main notebook |
 | `tests/` | Unit tests for the loader and the model |
 | `docs/` | Change document, one-pager (Markdown and PDF), and the interactive state network |
+| `SETUP.md` | Step-by-step environment setup for new teammates |
 | `AGENTS.md` | Instructions for AI coding agents working in this repo |
 
 ## Documents
