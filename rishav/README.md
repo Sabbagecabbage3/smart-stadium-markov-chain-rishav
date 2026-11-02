@@ -44,4 +44,16 @@ python rishav/paper_based/rishav_paper_evaluate.py --seeds 10
 | + keep every within-game transition | 85.0% | +1.1 |
 | + context mode (upcoming play's down, distance, field position) | 88.2% | +4.2 |
 
+## Fewer zeros, lighter files
+
+Last year's finest chain is a 1,680 x 1,688 matrix that is about 99.9% zeros (11.4 MB as a CSV). `rishav_markov.py` keeps that layout for compatibility, and adds two compact outputs, on simulated data:
+
+| Output | Size | Zeros |
+|---|---|---|
+| `Markov.build('DownTypeFPDist')`: last year's full matrix | 1,680 x 1,688, 11.4 MB | ~99.9% |
+| `Markov.build_transition_list(...)`: only transitions that happened | 3,556 rows, 190 KB | none stored |
+| `Markov.build_compact(...)`: states that occurred, smoothed P(next play type) | 381 rows x 8, 62 KB | no exact zeros |
+
+`PlayPredictor` also stores only situations it has seen (about 3,400-4,400 cells instead of about 14,000), with identical predictions.
+
 `--check` also confirms that `rishav_markov.py` writes CSVs with the same labels and values as last year's file, about 9x faster.

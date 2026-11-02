@@ -184,6 +184,55 @@ def transition_matrix(plays: pd.DataFrame, attrs: tuple, cross_drive: str = 'kic
 
 
 # ---------------------------------------------------------------------------
+# Compact versions: keep only what actually happened
+# ---------------------------------------------------------------------------
+
+def transition_list(plays: pd.DataFrame, attrs: tuple, cross_drive: str = 'all') -> pd.DataFrame:
+    """
+    The same counts as transition_matrix, but only transitions that actually
+    happened: one row per (from state, to state) with its count and probability.
+    The finest chain's full matrix has 2.8 million cells and is ~99.9% zeros;
+    this list keeps only the few thousand that aren't.
+    """
+    s = state_index(plays, attrs)
+    i, j = transitions(plays, cross_drive)
+    labels = np.array(state_labels(attrs))
+    pairs = pd.DataFrame({'from_index': s[i], 'to_index': s[j]})
+    pairs = pairs.value_counts().rename('count').reset_index().sort_values(['from_index', 'to_index'])
+    pairs['probability'] = pairs['count'] / pairs.groupby('from_index')['count'].transform('sum')
+    pairs.insert(1, 'from_state', labels[pairs['from_index']])
+    pairs.insert(3, 'to_state', labels[pairs['to_index']])
+    return pairs.reset_index(drop=True)
+
+
+def next_type_table(plays: pd.DataFrame, attrs: tuple, cross_drive: str = 'all', alpha: float = 20.0) -> pd.DataFrame:
+    """
+    The part conflation actually uses, with no zeros: one row per state that
+    occurred, its number of plays, and SMOOTHED P(next play type) for R..O.
+
+    Smoothing backs off through the coarser chains (for the full chain:
+    DownTypeFPDist -> DownTypeFP -> DownType -> Down -> overall), so no play
+    type is ever exactly 0. Same math as PlayPredictor(mode='previous').
+    """
+    i, j = transitions(plays, cross_drive)
+    y = plays['type_id'].to_numpy()[j]
+    full = state_index(plays, attrs)[i]
+    observed = np.unique(full)
+    sizes = [SIZES[a] for a in attrs]
+    k = len(PLAY_TYPES)
+    probs = np.full((len(observed), k), 1.0 / k)
+    for m in range(len(attrs) + 1):                        # coarsest level (nothing) to finest (all attrs)
+        div = int(np.prod(sizes[m:]))                      # dropping the last attrs = integer division
+        c = np.zeros((int(np.prod(sizes[:m])), k))
+        np.add.at(c, (full // div, y), 1)
+        oc = c[observed // div]
+        probs = (oc + alpha * probs) / (oc.sum(axis=1, keepdims=True) + alpha)
+    out = pd.DataFrame(probs, columns=list(PLAY_TYPES), index=np.array(state_labels(attrs))[observed])
+    out.insert(0, 'plays', oc.sum(axis=1).astype(int))
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Drop-in replacement for the original class
 # ---------------------------------------------------------------------------
 
@@ -213,6 +262,20 @@ class Markov:
         df = pd.DataFrame(table, columns=columns, index=labels)
         if out:
             df.to_csv(out)
+        return df
+
+    def build_compact(self, chain: str, out: str | None = None, alpha: float = 20.0) -> pd.DataFrame:
+        """Only states that occurred, with smoothed P(next play type) and no zeros (e.g. 381 rows x 8 columns)."""
+        df = next_type_table(self.plays, CHAINS[chain], self._policy(chain), alpha)
+        if out:
+            df.to_csv(out)
+        return df
+
+    def build_transition_list(self, chain: str, out: str | None = None) -> pd.DataFrame:
+        """Only transitions that happened, one per row, instead of the full mostly-zero matrix."""
+        df = transition_list(self.plays, CHAINS[chain], self._policy(chain))
+        if out:
+            df.to_csv(out, index=False)
         return df
 
     def createDownMarkov(self, out='Down.csv'):
@@ -281,11 +344,12 @@ class PlayPredictor:
     def fit(self, plays: pd.DataFrame) -> 'PlayPredictor':
         i, j = transitions(plays, self.cross_drive)
         y = plays['type_id'].to_numpy()[j]
-        self.counts = []
-        for codes, n in self._level_codes(self._fields(plays, i, j)):
-            c = np.zeros((n, len(PLAY_TYPES)))
-            np.add.at(c, (codes, y), 1)
-            self.counts.append(c)
+        self.counts = []                                   # per level: (situations seen, their counts), no empty rows
+        for codes, _ in self._level_codes(self._fields(plays, i, j)):
+            keys, row = np.unique(codes, return_inverse=True)
+            c = np.zeros((len(keys), len(PLAY_TYPES)))
+            np.add.at(c, (row, y), 1)
+            self.counts.append((keys, c))
         return self
 
     def predict_proba(self, plays: pd.DataFrame, i: np.ndarray, j: np.ndarray) -> np.ndarray:
@@ -293,8 +357,10 @@ class PlayPredictor:
         if self.counts is None:
             raise RuntimeError('call fit() first')
         p = np.full((len(i), len(PLAY_TYPES)), 1.0 / len(PLAY_TYPES))
-        for (codes, _), table in zip(self._level_codes(self._fields(plays, i, j)), self.counts):
-            c = table[codes]
+        for (codes, _), (keys, table) in zip(self._level_codes(self._fields(plays, i, j)), self.counts):
+            pos = np.minimum(np.searchsorted(keys, codes), len(keys) - 1)   # where each situation would be stored
+            seen = keys[pos] == codes                                       # False = never seen at this level
+            c = np.where(seen[:, None], table[pos], 0.0)                    # unseen situations count as 0 plays
             p = (c + self.alpha * p) / (c.sum(axis=1, keepdims=True) + self.alpha)
         return p
 
