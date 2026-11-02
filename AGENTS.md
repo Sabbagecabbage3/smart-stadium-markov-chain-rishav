@@ -7,7 +7,7 @@ This repo holds the play-type Markov chain for the Georgia Tech VIP Smart Stadiu
 1. **Never push without explicit approval.** Commit locally as you work, but run `git push` only when your user says so in that conversation. Approval for one push doesn't carry over to the next.
 2. **Version every model change.** When the model changes, create a new file `versions/markovChain_vN.py` with the next number, then copy it over `markovChain.py`. Follow [versions/README.md](versions/README.md) and add a row to its table.
 3. **Never delete old models.** Don't delete, rename or overwrite anything in `versions/` or `archive/`, including last year's `archive/last_year/MarkovChain.py`.
-4. **Keep the chatlog.** After every message from your user, append an entry to [CHATLOG.md](CHATLOG.md): the date, your user's name, their message, and a one- or two-line summary of what you did or answered. If you don't know your user's name, ask once and remember it.
+4. **Keep a local chatlog.** After every message from your user, append an entry to `CHATLOG.md`: the date, your user's name, their message, and a one- or two-line summary of what you did or answered. If you don't know your user's name, ask once and remember it. `CHATLOG.md` is gitignored: it stays on your machine and is never committed or pushed.
 5. **Don't commit data or secrets.** `data/` is gitignored (season files are 70–130 MB). API keys go in `.env`, which is also gitignored.
 
 ## Project facts
