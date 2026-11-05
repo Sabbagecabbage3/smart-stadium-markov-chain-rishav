@@ -26,6 +26,8 @@ What is new:
 """
 from __future__ import annotations
 
+import os
+import xml.etree.ElementTree as ET
 from itertools import product
 
 import numpy as np
@@ -54,15 +56,61 @@ DEFAULT_CLASS_MAP = {'R': 'run', 'P': 'pass', 'X': 'pat_fg', 'F': 'pat_fg',
 # Parsing
 # ---------------------------------------------------------------------------
 
+def read_xml_plays(path: str) -> pd.DataFrame:
+    """
+    One TAS/StatCrew game XML (e.g. CU1028.xml) -> a table with the same
+    playID / type / context columns as allplays.csv. Each <play> element
+    carries those three as attributes; comment and spot rows have no type and
+    are dropped later, exactly like empty-type rows in the CSV.
+    """
+    root = ET.parse(path).getroot()
+    return pd.DataFrame([{'playID': p.get('playid'), 'type': p.get('type'), 'context': p.get('context')}
+                         for p in root.iter('play')], columns=['playID', 'type', 'context'])
+
+
+def _is_xml(path: str) -> bool:
+    """True for .xml files, or any file whose first non-blank character is '<'."""
+    if path.lower().endswith('.xml'):
+        return True
+    with open(path, 'rb') as f:
+        return f.read(256).lstrip().startswith(b'<')
+
+
+def read_source(source) -> pd.DataFrame:
+    """
+    Accepts any of:
+      * allplays.csv (or any CSV in that format)
+      * one game XML file
+      * a folder of game XML files (read in file-name order)
+      * a list of any of the above, combined in order
+      * a DataFrame with playID / type / context columns
+    Drive numbers restart in every game, which is how load_plays tells games apart.
+    """
+    if isinstance(source, pd.DataFrame):
+        return source.copy()
+    if isinstance(source, (list, tuple)):
+        if not source:
+            raise ValueError('no input files given')
+        return pd.concat([read_source(s) for s in source], ignore_index=True)
+    path = os.fspath(source)
+    if os.path.isdir(path):
+        files = sorted(os.path.join(path, f) for f in os.listdir(path) if f.lower().endswith('.xml'))
+        if not files:
+            raise ValueError(f'no .xml files in folder {path!r}')
+        return read_source(files)
+    return read_xml_plays(path) if _is_xml(path) else pd.read_csv(path)
+
+
 def load_plays(source='allplays.csv') -> pd.DataFrame:
     """
-    Read allplays.csv (or a DataFrame with playID/type/context columns) into one
-    row per play with the state attributes already computed.
+    Read play-by-play into one row per play with the state attributes already
+    computed. `source` can be allplays.csv, a game XML file, a folder or list
+    of XML files, or a DataFrame (see read_source).
 
     Same filtering as the original: rows with no type, drive-start rows ('#')
     and penalties ('E') are dropped. Unknown play types become 'O'.
     """
-    raw = source.copy() if isinstance(source, pd.DataFrame) else pd.read_csv(source)
+    raw = read_source(source)
     raw = raw[raw['type'].notna()]
     raw = raw[~raw['type'].isin(['#', 'E'])].reset_index(drop=True)
 

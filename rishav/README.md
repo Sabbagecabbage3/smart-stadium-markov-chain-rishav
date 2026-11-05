@@ -44,6 +44,19 @@ python rishav/paper_based/rishav_paper_evaluate.py --seeds 10
 | + keep every within-game transition | 85.0% | +1.1 |
 | + context mode (upcoming play's down, distance, field position) | 88.2% | +4.2 |
 
+## Inputs
+
+Everything that takes play-by-play (`load_plays`, `Markov(...)`) accepts either format:
+
+```python
+Markov('allplays.csv')            # last year's CSV
+Markov('CU1028.xml')              # one TAS/StatCrew game XML
+Markov('games/')                  # a folder of game XMLs, read in file-name order
+Markov(['allplays.csv', 'CU1028.xml'])   # a list of any of these, combined
+```
+
+Each `<play>` in the XML carries the same `playid`, `type` and `context` fields as the CSV, so both go through the same checks and buckets. Drive numbers restart in every game, which is how games are told apart. Note: the XML records goal-to-go and kicks with distance 0, which falls in the 1-3 bucket, as in last year's code.
+
 ## Fewer zeros, lighter files
 
 Last year's finest chain is a 1,680 x 1,688 matrix that is about 99.9% zeros (11.4 MB as a CSV). `rishav_markov.py` keeps that layout for compatibility, and adds two compact outputs, on simulated data:
